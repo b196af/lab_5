@@ -1,0 +1,212 @@
+b = [1 0 1 1 0];
+impulse_response1 = [1 0 0; 1 0 1]; % i changed this to verify my idea
+p = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
+alp = [0,1]
+n = 10000;
+prob = [0.5,0.5];
+BER =[];
+for pppp = 1:length(p)
+prob1 = [p(pppp),1-p(pppp)];
+prob0 = [1-p(pppp),p(pppp)];
+nb = [];
+for i = 1:n
+    nb(i) = randsrc(1,1,[alp; prob]);
+end
+
+new_data = conv_enc(nb, impulse_response1);
+interfered_data = [];
+for i = 1:length(new_data)
+    if new_data(i) == 1
+        interfered_data(i) = randsrc(1,1,[alp; prob1]);
+    else 
+        interfered_data(i) = randsrc(1,1,[alp; prob0]);
+    end
+end
+
+new_decoded_data = conv_dec(interfered_data, impulse_response1);
+ber = 0;
+for pppppp = 1:length(new_decoded_data)
+    if new_decoded_data(pppppp) ~= nb(pppppp)
+        ber = ber+1;
+    end
+end
+
+BER(pppp) = ber/length(new_decoded_data);
+end
+plot(p,BER)
+xlabel('P')
+ylabel('BER')
+grid on
+
+%data = conv_enc(b, impulse_response1);
+%decoded_data = conv_dec(data, impulse_response1);
+function encoded_data = conv_enc(binary_data, impulse_response);
+finite_state_machine = {};
+c = 1;
+for i = 0:1
+    for j = 0:1
+        for input = 0:1
+            code = ""
+            siaaa = size(impulse_response,1)
+            for l = 1:size(impulse_response,1)
+                count = false;
+                input_str = [input,i,j];
+                for d = 1:length(impulse_response(l,:))
+                    count = xor(count, and(input_str(d),impulse_response(l,d)) );
+                end
+                char = int2str(int8(count));
+                code = code + char;
+            end
+            char1 = "";
+            char1 = char1 + int2str(input) + int2str(i) + int2str(j);
+            char2 = "";
+            char2 = char2 + int2str(input) +int2str(i);
+            finite_state_machine{c} = {char1,code,char2};
+            c = c+1;
+        end
+    end
+end
+
+now_state = "00";
+encoded_data = [];
+count = 1;
+for i = 1:length(binary_data)
+    now_state = int2str(binary_data(i)) + now_state;
+    for j =1:length(finite_state_machine)
+        haa = finite_state_machine{j}{1};
+        if haa == now_state
+            for k = 1:strlength(finite_state_machine{j}{2})
+                char = convertStringsToChars(finite_state_machine{j}{2})
+                a = char(k);
+                hhh = int8(a);
+                encoded_data(count) = int8(a)-48;
+                count = count + 1;
+            end
+            now_state = finite_state_machine{j}{3};
+        end
+    end
+end
+
+
+%encoded_data = finite_state_machine;
+end
+
+
+function decoded_data = conv_dec(binary_data, impulse_response);
+finite_state_machine = {};
+c = 1;
+for i = 0:1
+    for j = 0:1
+        for input = 0:1
+            code = ""
+            for l = 1:size(impulse_response,1)
+                count = false;
+                input_str = [input,i,j];
+                for d = 1:length(impulse_response(l,:))
+                    count = xor(count, and(input_str(d),impulse_response(l,d)) );
+                end
+                char = int2str(int8(count));
+                code = code + char;
+            end
+            char1 = "";
+            char1 = char1 + int2str(input) + int2str(i) + int2str(j);
+            char2 = "";
+            char2 = char2 + int2str(input) +int2str(i);
+            finite_state_machine{c} = {char1,code,char2};
+            c = c+1;
+        end
+    end
+end
+
+now_state = "00";
+statelist = {"00","01","10","11"}
+vertibe = {{0,0,0},{-1,-1,-1},{-1,-1,-1},{-1,-1,-1}};
+n = size(impulse_response,1);
+for i = 1:length(binary_data)/n;
+    %for input = 1:2
+        for v = 1:4
+            hamm1 = 0;
+            hamm2 = 0;
+            v1 = 0;
+            v2 = 0;
+            pre1 = -1;
+            pre2 = -1;
+            hasfind = false;
+            prestate1 = false;
+            prestate2 = false;
+            p1 = 0;
+            p2 = 0;
+            for v3 = 1:4
+                for fini = 1:length(finite_state_machine)
+                    iii = convertStringsToChars(finite_state_machine{fini}{1});
+                    paaaa = iii(2:3);
+                    prestate = 0;
+                    for ooo = 1:4
+                        if paaaa == convertStringsToChars(statelist{ooo})
+                            prestate = ooo;
+                        end
+                    end
+                    if (vertibe{i,v3}{1} ~= -1) & (finite_state_machine{fini}{3} == statelist{v}) & ~hasfind & v3 == prestate
+                        char = convertStringsToChars(finite_state_machine{fini}{2})
+                        for n1 = 1:n 
+                            a = char(n1);
+                            hhhhhh = binary_data((i-1)*n + n1);
+                            hhhhhhh = int8(a) - 48;
+                            if binary_data((i-1)*n + n1) ~= int8(a) - 48;
+                                v1= v1+1;
+                            end
+                        end
+                        hamm1 = vertibe{i,v3}{3} + v1;
+                        char = convertStringsToChars(finite_state_machine{fini}{1});
+                        pre1 = int8(char(1))-48;
+                        hasfind = true;
+                        prestate1 = true;
+                        p1 = v3;
+                    elseif (vertibe{i,v3}{1}) ~= -1 & (finite_state_machine{fini}{3} == statelist{v}) & hasfind & v3 == prestate
+                        char = convertStringsToChars(finite_state_machine{fini}{2})
+                        for n1 = 1:n 
+                            a = char(n1);
+                            if binary_data((i-1)*n + n1) ~= int8(a) -48;
+                                v2= v2+1;
+                            end
+                        end 
+                        hamm2 = vertibe{i,v3}{3} +v2;
+                        char = convertStringsToChars(finite_state_machine{fini}{1});
+                        pre2 = int8(char(1))-48;
+                        prestate2 = true;
+                        p2 = v3;
+                    end
+                end
+            end
+            if hamm2 > hamm1 & prestate1 & prestate2
+                vertibe{i+1,v} = {p1,pre1,hamm1};
+            elseif prestate1 & prestate2
+                vertibe{i+1,v} = {p2,pre2,hamm2};
+            elseif ~prestate2 & prestate1
+                vertibe{i+1,v} = {p1,pre1,hamm1};
+            elseif ~prestate2 & ~prestate1
+                vertibe{i+1,v} = {-1,-1,-1};
+            end
+        end
+    %end
+end
+
+
+min = 1000000;
+minindex = -1;
+for v = 1:4
+    if vertibe{length(vertibe),v}{3} < min
+        min = vertibe{length(vertibe),v}{3};
+        minindex = v;
+    end
+end
+now = minindex;
+decoded_data = [];
+
+for index = length(vertibe):-1:2
+    decoded_data(index-1) = vertibe{index,now}{2};
+    now = vertibe{index,now}{1};
+end
+
+
+end
